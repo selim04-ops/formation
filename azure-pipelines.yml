@@ -1,0 +1,160 @@
+trigger:
+- master
+
+pool:
+  name: 'admin-haithem'
+
+variables:
+  MAVEN_CACHE_FOLDER: $(Pipeline.Workspace)/.m2/repository
+  MAVEN_OPTS: '-Dmaven.repo.local=$(MAVEN_CACHE_FOLDER)'
+  sonar.projectKey: 'HaithemNASRI_BACKEND'
+  sonar.organization: 'haithemnasri'
+  ARTIFACT_NAME: 'spring-boot-app'
+  BUILD_ARTIFACT_PATH: '$(System.DefaultWorkingDirectory)/target'
+  DOCKER_IMAGE_NAME: 'hnasri1920/pfe-backend'
+  DOCKER_IMAGE_TAG: 'latest'
+
+stages:
+- stage: Build
+  displayName: 'Build and Test'
+  jobs:
+  - job: Build
+    steps:
+    - checkout: self
+
+    - script: |
+        echo "##vso[task.setvariable variable=JAVA_HOME]/usr/lib/jvm/java-17-openjdk-amd64"
+        echo "##vso[task.prependpath]$JAVA_HOME/bin"
+      displayName: 'Set JAVA_HOME'
+
+    - script: |
+        java -version
+        mvn -version
+      displayName: 'Verify tools'
+
+    - task: Cache@2
+      inputs:
+        key: 'maven | "$(Agent.OS)" | pom.xml'
+        restoreKeys: |
+          maven | "$(Agent.OS)"
+          maven
+        path: $(MAVEN_CACHE_FOLDER)
+
+    - script: |
+        mvn -B clean package -Dmaven.test.skip=true
+        echo "##vso[task.setvariable variable=JAR_FILE]$(ls $(BUILD_ARTIFACT_PATH)/*.jar | head -1)"
+      displayName: 'Build and package'
+
+    - task: SonarCloudPrepare@3
+      inputs:
+        SonarCloud: 'SonarCloudBackend'
+        organization: $(sonar.organization)
+        scannerMode: 'CLI'
+        projectKey: $(sonar.projectKey)
+        projectName: 'BACKEND'
+        extraProperties: |
+          sonar.java.binaries=target/classes
+          sonar.sources=src/main/java
+          sonar.skipTests=true
+
+    - task: SonarCloudAnalyze@3
+    - task: SonarCloudPublish@3
+
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: $(JAR_FILE)
+        artifact: $(ARTIFACT_NAME)
+        publishLocation: 'pipeline'
+
+- stage: Docker
+  displayName: 'Build and Push Docker Image'
+  dependsOn: Build
+  jobs:
+  - job: Docker
+    steps:
+    - checkout: self
+
+    - script: |
+        if [ -f "Dockerfile" ]; then
+          cat Dockerfile
+        else
+          echo "Dockerfile not found!" && exit 1
+        fi
+      displayName: 'Check Dockerfile'
+
+    - task: Docker@2
+      displayName: 'Login to Docker Hub'
+      inputs:
+        command: login
+        containerRegistry: 'dockerhub-service'
+
+    - task: Docker@2
+      displayName: 'Build Docker Image'
+      inputs:
+        command: build
+        repository: $(DOCKER_IMAGE_NAME)
+        tags: |
+          $(DOCKER_IMAGE_TAG)
+          $(Build.BuildNumber)
+        dockerfile: 'Dockerfile'
+        buildContext: '$(System.DefaultWorkingDirectory)'
+        arguments: '--no-cache --pull'
+
+    - task: Docker@2
+      displayName: 'Push Docker Image'
+      inputs:
+        command: push
+        repository: $(DOCKER_IMAGE_NAME)
+        tags: |
+          $(DOCKER_IMAGE_TAG)
+          $(Build.BuildNumber)
+
+- stage: Deploy
+  displayName: 'Deploy to AKS'
+  dependsOn: Docker
+  jobs:
+  - job: Deploy
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: 'Configure kubectl for AKS'
+      inputs:
+        azureSubscription: 'AKS-service-connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group NasriAzure --name k8s --admin --overwrite-existing
+          kubectl config use-context k8s-admin
+          kubectl get nodes
+
+    - task: AzureCLI@2
+      displayName: 'Install PostgreSQL'
+      inputs:
+        azureSubscription: 'AKS-service-connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm upgrade --install postgres bitnami/postgresql \
+            --namespace default \
+            --set auth.username=postgres \
+            --set auth.password=mysecretpassword \
+            --set auth.database=postgres \
+            --set primary.persistence.enabled=false
+
+    - task: AzureCLI@2
+      displayName: 'Apply backend Kubernetes manifests'
+      inputs:
+        azureSubscription: 'AKS-service-connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          kubectl apply -f manifests/backend-config.yaml
+          kubectl apply -f manifests/backend-secrets.yaml
+          kubectl apply -f manifests/backend-deployment.yaml
+          kubectl apply -f manifests/backend-service.yaml
+          kubectl apply -f manifests/fullstack-ingress.yaml
+          kubectl get pods
+          kubectl get svc

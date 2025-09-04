@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.esprit</groupId>
 	<artifactId>gfromation</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.0.1</version>
 	<name>fromation</name>
 	<description>backend of project formation</description>
 	<properties>

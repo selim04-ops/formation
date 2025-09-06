@@ -131,11 +131,7 @@
 			<version>2.24.0</version> <!-- Use the latest version -->
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-			<groupId>com.h2database</groupId>
-			<artifactId>h2</artifactId>
-			<scope>test</scope>
-		</dependency>
+
 
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>

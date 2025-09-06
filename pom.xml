@@ -17,6 +17,11 @@
 		<java.version>17</java.version>
 		<sonar.organization>nasrihoussemeddine</sonar.organization>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
+		<junit-jupiter.version>5.10.2</junit-jupiter.version>
+		<mockito.version>5.12.0</mockito.version>
+		<maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
+		<jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
+
 	</properties>
 	<dependencies>
 		<dependency>
@@ -88,7 +93,7 @@
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
-			<version>42.7.5</version>
+			<version>42.7.7</version>
 		</dependency>
 
 		<dependency>
@@ -108,11 +113,7 @@
 			<artifactId>hibernate-validator</artifactId>
 			<version>8.0.2.Final</version> <!-- Use the latest stable version -->
 		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-test</artifactId>
-			<scope>test</scope>
-		</dependency>
+
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-api</artifactId>
@@ -123,6 +124,12 @@
 			<artifactId>jjwt-impl</artifactId>
 			<version>0.11.5</version>
 			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-jul</artifactId>
+			<version>2.24.0</version> <!-- Use the latest version -->
+			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
@@ -219,9 +226,7 @@
 					<includes>
 						<include>**/*Test.java</include>
 					</includes>
-					<systemPropertyVariables>
-						<java.util.logging.manager>org.apache.logging.log4j.jul.LogManager</java.util.logging.manager>
-					</systemPropertyVariables>
+
 				</configuration>
 				<dependencies>
 					<dependency>
@@ -231,6 +236,32 @@
 					</dependency>
 				</dependencies>
 			</plugin>
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco-maven-plugin.version}</version>
+				<configuration>
+					<excludes>
+						<exclude>java/*</exclude>
+						<exclude>jdk/*</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
 
 		</plugins>
 	</build>
